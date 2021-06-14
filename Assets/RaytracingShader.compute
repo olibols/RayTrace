@@ -1,0 +1,221 @@
+ // Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel CSMain
+
+// Create a RenderTexture with enableRandomWrite flag and set it
+// with cs.SetTexture
+RWTexture2D<float4> Result;
+float4x4 CameraToWorld;
+float4x4 CameraInverse;
+
+Texture2D<float4> SkyboxTexture;
+SamplerState sampler_SkyboxTexture;
+
+StructuredBuffer<int> Blocks;
+
+RWStructuredBuffer<float4> debug;
+
+static const float PI = 3.14159265f;
+
+static const int MaxSteps = 255;
+
+bool test = false;
+
+struct Ray
+{
+	float3 Origin;
+	float3 Direction;
+};
+
+struct Hit
+{
+    float3 Position;
+    float Distance;
+    float3 Normal;
+};
+
+Hit CreateHit(float3 position, float distance, float3 normal)
+{
+    Hit hit;
+    hit.Position = position;
+    hit.Distance = distance;
+    hit.Normal = normal;
+    return hit;
+}
+
+Ray CreateRay(float3 Origin, float3 Direction)
+{
+	Ray ray;
+	ray.Origin = Origin;
+	ray.Direction = Direction;
+	return ray;
+};
+
+//Create the normalized ray in a direction for a given pixel
+Ray CreateCameraRay(float2 pixel)
+{
+	float3 origin = mul(CameraToWorld, float4(0.0f, 0.0f, 0.0f, 1.0f)).xyz;
+	float3 direction = mul(CameraInverse, float4(pixel, 0.0f, 1.0f)).xyz;
+	direction = mul(CameraToWorld, float4(direction, 0.0f)).xyz;
+	direction = normalize(direction);
+	
+	return CreateRay(origin, direction);
+}
+
+float GetBlock(int x, int y, int z)
+{
+    if (x < 0 || x > 32 || y < 0 || y > 32 || z < 0 || z > 32)
+        return 0;
+    return Blocks[x + 32 * (y + 32 * z)];
+}
+
+bool VoxelIntersect(Ray ray, uint3 id)
+{
+    int3 currentvoxel = int3(ceil(ray.Origin.x), ceil(ray.Origin.y), ceil(ray.Origin.z));
+    float3 endpos = float3(ray.Origin.x, ray.Origin.y, ray.Origin.z);
+        
+    int stepX;
+    float tMaxX;
+    float tDeltaX;
+    if (ray.Direction.x > 0.0)
+    {
+        stepX = 1;
+        tDeltaX = 1.0f / ray.Direction.x;
+        tMaxX = (currentvoxel.x - ray.Origin.x) / ray.Direction.x;
+    }
+    else if (ray.Direction.x < 0.0)
+    {
+        stepX = -1;
+        tDeltaX = 1.0f / -ray.Direction.x;
+        tMaxX = ((currentvoxel.x + stepX) - ray.Origin.x) / ray.Direction.x;
+    }
+    else
+    {
+        stepX = 0;
+        tDeltaX = 0;
+        tMaxX = 0;
+    }
+    
+    int stepY;
+    float tMaxY;
+    float tDeltaY;
+    if (ray.Direction.y > 0.0)
+    {
+        stepY = 1;
+        tDeltaY = 1.0f / ray.Direction.y;
+        tMaxY = (((currentvoxel.y + stepY) - 1) - ray.Origin.y) / ray.Direction.y;
+    }
+    else if (ray.Direction.y < 0.0)
+    {
+        stepY = -1;
+        tDeltaY = 1.0f / -ray.Direction.y;
+        tMaxY = ((currentvoxel.y + stepY) - ray.Origin.y) / ray.Direction.y;
+    }
+    else
+    {
+        stepY = 0;
+        tDeltaY = 0;
+        tMaxY = 0;
+    }
+    
+    int stepZ;
+    float tMaxZ;
+    float tDeltaZ;
+    if (ray.Direction.z > 0.0)
+    {
+        stepZ = 1;
+        tDeltaZ = 1.0f / ray.Direction.z;
+        tMaxZ = (currentvoxel.z - ray.Origin.z) / ray.Direction.z;
+    }
+    else if (ray.Direction.z < 0.0)
+    {
+        stepZ = -1;
+        tDeltaZ = 1.0f / -ray.Direction.z;
+        tMaxZ = ((currentvoxel.z + stepZ) - ray.Origin.z) / ray.Direction.z;
+    }
+    else
+    {
+        stepZ = 0;
+        tDeltaZ = 0;
+        tMaxZ = 0;
+    }
+       
+    for (int i = 0; i < 1000; i++)
+    {
+        if (tMaxX < tMaxY)
+        {
+            if (tMaxX < tMaxZ)
+            {
+                currentvoxel.x += stepX;
+                tMaxX += tDeltaX;
+                endpos.x += tDeltaX;
+            }
+            else
+            {
+                currentvoxel.z += stepZ;
+                tMaxZ += tDeltaZ;
+                endpos.z += tDeltaZ;
+            }
+        }
+        else
+        {
+            if (tMaxY < tMaxZ)
+            {
+                currentvoxel.y += stepY;
+                tMaxY += tDeltaY;
+                endpos.y += tDeltaY;
+            }
+            else
+            {
+                currentvoxel.z += stepZ;
+                tMaxZ += tDeltaZ;
+                endpos.z += tDeltaZ;
+            }
+        }
+        
+        if (GetBlock(currentvoxel.x, currentvoxel.y, currentvoxel.z) == 2)
+        {
+            uint w, h;
+            Result.GetDimensions(w, h);
+            if (id.x == w / 2 && id.y == h / 2)
+            {
+                float len = length(float3(endpos.x - ray.Origin.x, endpos.y - ray.Origin.y, endpos.z - ray.Origin.z)) - 1;
+                float nx = len;
+                float ny = 0;
+                float nz = 0;
+                debug[0] = float4(ray.Origin + i * ray.Direction, 0.0);
+            }
+                
+            return true;
+        }
+    }
+    return false;
+}
+
+bool Trace(Ray ray, uint3 id)
+{
+    
+    return VoxelIntersect(ray, id);
+}
+
+[numthreads(8, 8, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+	uint width, height;
+	Result.GetDimensions(width, height);
+	float2 pixel = float2((id.xy + float2(0.5f, 0.5f)) / float2(width, height) * 2.0f - 1.0f);
+	
+	Ray ray = CreateCameraRay(pixel);
+	
+    bool res = Trace(ray, id);
+    
+    if (res)
+    {
+        Result[id.xy] = float4(1.0, 0.0, 0.0, 1.0);
+    }
+    else
+    {
+        float theta = acos(ray.Direction.y) / -PI;
+        float phi = atan2(ray.Direction.x, -ray.Direction.z) / -PI * 0.5f;
+        Result[id.xy] = SkyboxTexture.SampleLevel(sampler_SkyboxTexture, float2(phi, theta), 0);
+    }
+}

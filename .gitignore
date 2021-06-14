@@ -361,3 +361,8 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+/Assets/Fantasy Skybox FREE
+/UserSettings
+/Temp
+/ProjectSettings
+/Library
