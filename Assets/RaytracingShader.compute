@@ -24,21 +24,36 @@ struct Ray
 {
 	float3 Origin;
 	float3 Direction;
+    float3 Energy;
 };
 
-struct Hit
+struct VoxelHit
+{
+    int3 Position;
+    int VoxelType;
+};
+
+struct RayHit
 {
     float3 Position;
-    float Distance;
     float3 Normal;
+    float Distance;
 };
 
-Hit CreateHit(float3 position, float distance, float3 normal)
+VoxelHit CreateVoxelHit(int3 position, int voxeltype)
 {
-    Hit hit;
+    VoxelHit hit;
     hit.Position = position;
-    hit.Distance = distance;
+    hit.VoxelType = voxeltype;
+    return hit;
+}
+
+RayHit CreateRayHit(float3 position, float3 normal, float distance)
+{
+    RayHit hit;
+    hit.Position = position;
     hit.Normal = normal;
+    hit.Distance = distance;
     return hit;
 }
 
@@ -47,6 +62,7 @@ Ray CreateRay(float3 Origin, float3 Direction)
 	Ray ray;
 	ray.Origin = Origin;
 	ray.Direction = Direction;
+    ray.Energy = float3(1.0, 1.0, 1.0);
 	return ray;
 };
 
@@ -68,78 +84,75 @@ float GetBlock(int x, int y, int z)
     return Blocks[x + 32 * (y + 32 * z)];
 }
 
-bool VoxelIntersect(Ray ray, uint3 id)
+float DistanceToBox(float3 raypos, int3 pos)
+{
+    float3 q = abs(raypos - (pos - float3(0.5f, 0.5f, 0.5f))) - 0.5f;
+    return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0);
+}
+
+float SDFIntersect(Ray ray, int3 pos)
+{
+    float depth = 0.0f;
+    for (int i = 0; i < 1000; i++)
+    {
+        float dist = DistanceToBox(ray.Origin + depth * ray.Direction, pos);
+        if (dist < 0.001f)
+        {
+            return depth;
+        }
+        depth += dist;
+    }
+    return 0.0f;
+}
+
+VoxelHit VoxelIntersect(Ray ray)
 {
     int3 currentvoxel = int3(ceil(ray.Origin.x), ceil(ray.Origin.y), ceil(ray.Origin.z));
-    float3 endpos = float3(ray.Origin.x, ray.Origin.y, ray.Origin.z);
-        
-    int stepX;
-    float tMaxX;
-    float tDeltaX;
-    if (ray.Direction.x > 0.0)
+    
+    int stepX, stepY, stepZ;
+    float tMaxX, tMaxY, tMaxZ;
+    float tDeltaX, tDeltaY, tDeltaZ;
+    
+    if (ray.Direction.x > 0)
     {
         stepX = 1;
-        tDeltaX = 1.0f / ray.Direction.x;
         tMaxX = (currentvoxel.x - ray.Origin.x) / ray.Direction.x;
+        tDeltaX = 1.0 / ray.Direction.x;
     }
-    else if (ray.Direction.x < 0.0)
+    else
     {
         stepX = -1;
-        tDeltaX = 1.0f / -ray.Direction.x;
-        tMaxX = ((currentvoxel.x + stepX) - ray.Origin.x) / ray.Direction.x;
-    }
-    else
-    {
-        stepX = 0;
-        tDeltaX = 0;
-        tMaxX = 0;
+        tMaxX = ((currentvoxel.x - 1) - ray.Origin.x) / ray.Direction.x;
+        tDeltaX = 1.0 / -ray.Direction.x;
     }
     
-    int stepY;
-    float tMaxY;
-    float tDeltaY;
-    if (ray.Direction.y > 0.0)
+    if (ray.Direction.y > 0)
     {
         stepY = 1;
-        tDeltaY = 1.0f / ray.Direction.y;
-        tMaxY = (((currentvoxel.y + stepY) - 1) - ray.Origin.y) / ray.Direction.y;
+        tMaxY = (currentvoxel.y - ray.Origin.y) / ray.Direction.y;
+        tDeltaY = 1.0 / ray.Direction.y;
     }
-    else if (ray.Direction.y < 0.0)
+    else
     {
         stepY = -1;
-        tDeltaY = 1.0f / -ray.Direction.y;
-        tMaxY = ((currentvoxel.y + stepY) - ray.Origin.y) / ray.Direction.y;
-    }
-    else
-    {
-        stepY = 0;
-        tDeltaY = 0;
-        tMaxY = 0;
+        tMaxY = ((currentvoxel.y - 1) - ray.Origin.y) / ray.Direction.y;
+        tDeltaY = 1.0 / -ray.Direction.y;
     }
     
-    int stepZ;
-    float tMaxZ;
-    float tDeltaZ;
-    if (ray.Direction.z > 0.0)
+    if (ray.Direction.z > 0)
     {
         stepZ = 1;
-        tDeltaZ = 1.0f / ray.Direction.z;
         tMaxZ = (currentvoxel.z - ray.Origin.z) / ray.Direction.z;
-    }
-    else if (ray.Direction.z < 0.0)
-    {
-        stepZ = -1;
-        tDeltaZ = 1.0f / -ray.Direction.z;
-        tMaxZ = ((currentvoxel.z + stepZ) - ray.Origin.z) / ray.Direction.z;
+        tDeltaZ = 1.0 / ray.Direction.z;
     }
     else
     {
-        stepZ = 0;
-        tDeltaZ = 0;
-        tMaxZ = 0;
+        stepZ = -1;
+        tMaxZ = ((currentvoxel.z - 1) - ray.Origin.z) / ray.Direction.z;
+        tDeltaZ = 1.0 / -ray.Direction.z;
     }
-       
-    for (int i = 0; i < 1000; i++)
+            
+    for (int i = 0; i < 100; i++)
     {
         if (tMaxX < tMaxY)
         {
@@ -147,13 +160,11 @@ bool VoxelIntersect(Ray ray, uint3 id)
             {
                 currentvoxel.x += stepX;
                 tMaxX += tDeltaX;
-                endpos.x += tDeltaX;
             }
             else
             {
                 currentvoxel.z += stepZ;
                 tMaxZ += tDeltaZ;
-                endpos.z += tDeltaZ;
             }
         }
         else
@@ -162,42 +173,85 @@ bool VoxelIntersect(Ray ray, uint3 id)
             {
                 currentvoxel.y += stepY;
                 tMaxY += tDeltaY;
-                endpos.y += tDeltaY;
             }
             else
             {
                 currentvoxel.z += stepZ;
                 tMaxZ += tDeltaZ;
-                endpos.z += tDeltaZ;
             }
         }
         
-        if (GetBlock(currentvoxel.x, currentvoxel.y, currentvoxel.z) == 2)
+        float block = GetBlock(currentvoxel.x, currentvoxel.y, currentvoxel.z);
+        
+        if (block != 0.0)
         {
-            uint w, h;
-            Result.GetDimensions(w, h);
-            if (id.x == w / 2 && id.y == h / 2)
-            {
-                float len = length(float3(endpos.x - ray.Origin.x, endpos.y - ray.Origin.y, endpos.z - ray.Origin.z)) - 1;
-                float nx = len;
-                float ny = 0;
-                float nz = 0;
-                debug[0] = float4(ray.Origin + i * ray.Direction, 0.0);
-            }
-                
-            return true;
+            VoxelHit hit = CreateVoxelHit(currentvoxel, block);
+            return hit;
         }
     }
-    return false;
+    VoxelHit hit = CreateVoxelHit(int3(0, 0, 0), 0);
+    return hit;
 }
 
-bool Trace(Ray ray, uint3 id)
+float3 CalculateNormal(float3 position, int3 boxpos)
 {
-    
-    return VoxelIntersect(ray, id);
+    float c = DistanceToBox(position, boxpos);
+    float2 eps = float2(0.001, 0.0);
+    return normalize(float3(DistanceToBox(position + eps.xyy, boxpos), DistanceToBox(position + eps.yxy, boxpos), DistanceToBox(position + eps.yyx, boxpos)) - c);
 }
 
-[numthreads(8, 8, 1)]
+float3 Shade(inout Ray ray, RayHit hit)
+{
+    if (hit.Distance == 0)
+    {
+        ray.Energy = 0.0f;
+        
+        float theta = acos(ray.Direction.y) / -PI;
+        float phi = atan2(ray.Direction.x, -ray.Direction.z) / -PI * 0.5f;
+        return SkyboxTexture.SampleLevel(sampler_SkyboxTexture, float2(phi, theta), 0).xyz;
+    }
+    else
+    {
+        float3 specular = float3(0.2f, 0.2f, 0.2f);
+        
+        ray.Origin = hit.Position + hit.Normal * 0.001f;
+        ray.Direction = reflect(ray.Direction, hit.Normal);
+        ray.Energy *= specular;
+        
+        return float3(0.0, 0.0, 0.0);
+    }
+}
+
+RayHit Trace(Ray ray)
+{
+        
+    VoxelHit voxelhit = VoxelIntersect(ray);
+    
+    if (voxelhit.VoxelType == 0.0)
+    {
+        return CreateRayHit(float3(0.0, 0.0, 0.0), float3(0.0, 0.0, 0.0), 0.0);
+    }
+    else
+    {
+        float dist = SDFIntersect(ray, voxelhit.Position);
+        float3 pos = ray.Origin + ray.Direction * dist;
+        
+        return CreateRayHit(pos, CalculateNormal(pos, voxelhit.Position), dist);
+    }
+}
+
+float3 Render(Ray ray)
+{
+    float3 result = float3(0.0, 0.0, 0.0);
+    for (int i = 0; i < 2; i++)
+    {
+        RayHit hit = Trace(ray);
+        result += ray.Energy * Shade(ray, hit);
+    }
+    return result;
+}
+
+[numthreads(32, 32, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID)
 {
 	uint width, height;
@@ -206,16 +260,8 @@ void CSMain(uint3 id : SV_DispatchThreadID)
 	
 	Ray ray = CreateCameraRay(pixel);
 	
-    bool res = Trace(ray, id);
+    float3 res = Render(ray);
+    //bool res = SDFIntersect(ray);
     
-    if (res)
-    {
-        Result[id.xy] = float4(1.0, 0.0, 0.0, 1.0);
-    }
-    else
-    {
-        float theta = acos(ray.Direction.y) / -PI;
-        float phi = atan2(ray.Direction.x, -ray.Direction.z) / -PI * 0.5f;
-        Result[id.xy] = SkyboxTexture.SampleLevel(sampler_SkyboxTexture, float2(phi, theta), 0);
-    }
+    Result[id.xy] = float4(res, 0.0f);
 }

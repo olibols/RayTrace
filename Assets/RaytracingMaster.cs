@@ -22,6 +22,11 @@ public class RaytracingMaster : MonoBehaviour
         Render(destination);
     }
 
+    private int offset(int x, int y, int z)
+    {
+        return x + 32 * (y + 32 * z);
+    }
+
     private void Awake()
     {
         m_Camera = GetComponent<Camera>();
@@ -42,6 +47,9 @@ public class RaytracingMaster : MonoBehaviour
         blockarr[3] = 2;
         blockarr[4] = 2;
         blockarr[5] = 2;
+        blockarr[offset(1, 2, 0)] = 2;
+        blockarr[offset(4, 2, 0)] = 2;
+        blockarr[offset(3, 1, 0)] = 2;
 
         Debug = new ComputeBuffer(1, 16, ComputeBufferType.Default);
         RayTracingShader.SetBuffer(0, "debug", Debug);
@@ -65,9 +73,9 @@ public class RaytracingMaster : MonoBehaviour
         InitRenderTexture();
         SetShaderParams();
 
-        int threadGroupsX = Mathf.CeilToInt(Screen.width / 8.0f);
-        int threadGroupsY = Mathf.CeilToInt(Screen.height / 8.0f);
-        RayTracingShader.Dispatch(0, threadGroupsX, threadGroupsY, 1);
+        int threadGroupsX = Mathf.CeilToInt(Screen.width / 32.0f);
+        int threadGroupsY = Mathf.CeilToInt(Screen.height / 32.0f);
+        RayTracingShader.Dispatch(0, threadGroupsX, threadGroupsY, 5);
         Graphics.Blit(m_Target, destination);
 
         Debug.GetData(element);
@@ -75,23 +83,19 @@ public class RaytracingMaster : MonoBehaviour
         {
             print($"{element[0].x}, {element[0].y}, {element[0].z}");
             Vector4[] arr = new Vector4[1];
-            //arr[0] = new Vector4(0.0f, 0.0f, 0.0f, 999.0f);
+            arr[0] = new Vector4(0.0f, 0.0f, 0.0f, 999.0f);
             Debug.SetData(arr);
         }
     }
 
     private void OnDrawGizmos()
     {
-        Gizmos.DrawCube(new Vector3(element[0].x - 0.5f, element[0].y - 0.5f, element[0].z - 0.5f), new Vector3(1.0f, 1.0f, 1.0f));
+        //Gizmos.DrawCube(new Vector3(element[0].x - 0.5f, element[0].y - 0.5f, element[0].z - 0.5f), new Vector3(1.0f, 1.0f, 1.0f));
 
         for(int x = 0; x < 6; x++)
         {
             Gizmos.DrawWireCube(new Vector3(x - 0.5f, -0.5f, -0.5f), new Vector3(1.0f, 1.0f, 1.0f));
         }
-
-        Vector3 rot = m_Camera.transform.eulerAngles.normalized;
-        Vector3 posthing = rot * 4;
-        print(rot);
     }
 
     private void OnGUI()
