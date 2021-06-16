@@ -6,6 +6,7 @@
 RWTexture2D<float4> Result;
 float4x4 CameraToWorld;
 float4x4 CameraInverse;
+float4 LightDir;
 
 Texture2D<float4> SkyboxTexture;
 SamplerState sampler_SkyboxTexture;
@@ -15,8 +16,7 @@ StructuredBuffer<int> Blocks;
 RWStructuredBuffer<float4> debug;
 
 static const float PI = 3.14159265f;
-
-static const int MaxSteps = 255;
+static const int CHUNK_SIZE = 32;
 
 bool test = false;
 
@@ -79,9 +79,9 @@ Ray CreateCameraRay(float2 pixel)
 
 float GetBlock(int x, int y, int z)
 {
-    if (x < 0 || x > 32 || y < 0 || y > 32 || z < 0 || z > 32)
+    if (x < 0 || x > CHUNK_SIZE || y < 0 || y > CHUNK_SIZE || z < 0 || z > CHUNK_SIZE)
         return 0;
-    return Blocks[x + 32 * (y + 32 * z)];
+    return Blocks[x + CHUNK_SIZE * (y + CHUNK_SIZE * z)];
 }
 
 float DistanceToBox(float3 raypos, int3 pos)
@@ -93,16 +93,12 @@ float DistanceToBox(float3 raypos, int3 pos)
 float SDFIntersect(Ray ray, int3 pos)
 {
     float depth = 0.0f;
-    for (int i = 0; i < 1000; i++)
+    for (int i = 0; i < 30; i++)
     {
         float dist = DistanceToBox(ray.Origin + depth * ray.Direction, pos);
-        if (dist < 0.001f)
-        {
-            return depth;
-        }
         depth += dist;
     }
-    return 0.0f;
+    return depth;
 }
 
 VoxelHit VoxelIntersect(Ray ray)
@@ -200,26 +196,9 @@ float3 CalculateNormal(float3 position, int3 boxpos)
     return normalize(float3(DistanceToBox(position + eps.xyy, boxpos), DistanceToBox(position + eps.yxy, boxpos), DistanceToBox(position + eps.yyx, boxpos)) - c);
 }
 
-float3 Shade(inout Ray ray, RayHit hit)
+float map(float value, float low1, float high1, float low2, float high2)
 {
-    if (hit.Distance == 0)
-    {
-        ray.Energy = 0.0f;
-        
-        float theta = acos(ray.Direction.y) / -PI;
-        float phi = atan2(ray.Direction.x, -ray.Direction.z) / -PI * 0.5f;
-        return SkyboxTexture.SampleLevel(sampler_SkyboxTexture, float2(phi, theta), 0).xyz;
-    }
-    else
-    {
-        float3 specular = float3(0.2f, 0.2f, 0.2f);
-        
-        ray.Origin = hit.Position + hit.Normal * 0.001f;
-        ray.Direction = reflect(ray.Direction, hit.Normal);
-        ray.Energy *= specular;
-        
-        return float3(0.0, 0.0, 0.0);
-    }
+    return low2 + (value - low1) * (high2 - low2) / (high1 - low1);
 }
 
 RayHit Trace(Ray ray)
@@ -240,14 +219,41 @@ RayHit Trace(Ray ray)
     }
 }
 
+float3 Shade(inout Ray ray, RayHit hit)
+{
+    if (hit.Distance == 0)
+    {
+        ray.Energy = 0.0f;
+        
+        float theta = acos(ray.Direction.y) / -PI;
+        float phi = atan2(ray.Direction.x, -ray.Direction.z) / -PI * 0.5f;
+        return SkyboxTexture.SampleLevel(sampler_SkyboxTexture, float2(phi, theta), 0).xyz;
+    }
+    else
+    {
+        float3 SurfaceCol = float3(1.0f, 0.0f, 0.0f);
+        float diffuse = max(dot(hit.Normal, LightDir.xyz) * -1, 0.0);
+        diffuse = map(diffuse, 0.0f, 1.0f, 0.4f, 1.0f); // Add ambient by reducing lows
+        
+        float shadow = 0.8;
+        float3 ShadowRayOrigin = hit.Position + hit.Normal * 0.01; // Take us a bit away from the surface for tracing.
+        float3 ShadowRayDirection = -LightDir.xyz;
+        Ray ray = CreateRay(ShadowRayOrigin, ShadowRayDirection);
+        
+        if (Trace(ray).Distance == 0.0)
+        {
+            shadow = 1.0;
+        }
+        
+        return (diffuse * LightDir.w * SurfaceCol * shadow);
+    }
+}
+
 float3 Render(Ray ray)
 {
     float3 result = float3(0.0, 0.0, 0.0);
-    for (int i = 0; i < 2; i++)
-    {
-        RayHit hit = Trace(ray);
-        result += ray.Energy * Shade(ray, hit);
-    }
+    RayHit hit = Trace(ray);
+    result = Shade(ray, hit);
     return result;
 }
 

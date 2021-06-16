@@ -9,6 +9,8 @@ public class RaytracingMaster : MonoBehaviour
 
     public Texture CrosshairTexture;
 
+    public Light DirectionalLight;
+
     private RenderTexture m_Target;
     private Camera m_Camera;
 
@@ -31,25 +33,21 @@ public class RaytracingMaster : MonoBehaviour
     {
         m_Camera = GetComponent<Camera>();
 
-        int[] blockarr = new int[32*32*32];
+        int[] blockarr = new int[256 * 256 * 256];
 
         element = new Vector4[1];
 
-        /*for (int i = 0; i < (32*32*32); i++)
+        for(int x = 0; x < 32; x++)
         {
-            if (Random.Range(0.0f, 100.0f) < 2.0f)
-                blockarr[i] = 2;
-        }*/
+            for (int z = 0; z < 32; z++)
+            {
+                blockarr[offset(x, 1, z)] = 2;
+            }
+        }
 
-        blockarr[0] = 2;
-        blockarr[1] = 2;
-        blockarr[2] = 2;
-        blockarr[3] = 2;
-        blockarr[4] = 2;
-        blockarr[5] = 2;
-        blockarr[offset(1, 2, 0)] = 2;
-        blockarr[offset(4, 2, 0)] = 2;
-        blockarr[offset(3, 1, 0)] = 2;
+        blockarr[offset(5, 4, 5)] = 2;
+        blockarr[offset(5, 3, 5)] = 2;
+        blockarr[offset(5, 2, 5)] = 2;
 
         Debug = new ComputeBuffer(1, 16, ComputeBufferType.Default);
         RayTracingShader.SetBuffer(0, "debug", Debug);
@@ -66,6 +64,9 @@ public class RaytracingMaster : MonoBehaviour
         RayTracingShader.SetTexture(0, "SkyboxTexture", SkyboxTexture);
         RayTracingShader.SetMatrix("CameraToWorld", m_Camera.cameraToWorldMatrix);        
         RayTracingShader.SetMatrix("CameraInverse", m_Camera.projectionMatrix.inverse);
+
+        Vector3 l = DirectionalLight.transform.forward;
+        RayTracingShader.SetVector("LightDir", new Vector4(l.x, l.y, l.z, DirectionalLight.intensity));
     }
 
     private void Render(RenderTexture destination)
