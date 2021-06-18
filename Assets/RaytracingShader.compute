@@ -17,6 +17,7 @@ RWStructuredBuffer<float4> debug;
 
 static const float PI = 3.14159265f;
 static const int CHUNK_SIZE = 256;
+static const float MAX_VAL = 99999999999.0f;
 
 bool test = false;
 
@@ -104,51 +105,21 @@ float SDFIntersect(Ray ray, int3 pos)
 VoxelHit VoxelIntersect(Ray ray)
 {
     int3 currentvoxel = int3(floor(ray.Origin.x), floor(ray.Origin.y), floor(ray.Origin.z));
+                
+    int stepX = (ray.Direction.x >= 0) ? 1 : -1;
+    int stepY = (ray.Direction.y >= 0) ? 1 : -1;
+    int stepZ = (ray.Direction.z >= 0) ? 1 : -1;
     
-    int stepX, stepY, stepZ;
-    float tMaxX, tMaxY, tMaxZ;
-    float tDeltaX, tDeltaY, tDeltaZ;
+    float tMaxX = (ray.Direction.x > 0) ? ((currentvoxel.x + 1) - ray.Origin.x) / ray.Direction.x : ((currentvoxel.x) - ray.Origin.x) / ray.Direction.x;
+    float tMaxY = (ray.Direction.y > 0) ? ((currentvoxel.y + 1) - ray.Origin.y) / ray.Direction.y : ((currentvoxel.y) - ray.Origin.y) / ray.Direction.y;
+    float tMaxZ = (ray.Direction.z > 0) ? ((currentvoxel.z + 1) - ray.Origin.z) / ray.Direction.z : ((currentvoxel.z) - ray.Origin.z) / ray.Direction.z;
     
-    if (ray.Direction.x > 0)
-    {
-        stepX = 1;
-        tMaxX = (currentvoxel.x + ray.Origin.x) / ray.Direction.x;
-        tDeltaX = 1.0 / ray.Direction.x;
-    }
-    else
-    {
-        stepX = -1;
-        tMaxX = ((currentvoxel.x - 1) + ray.Origin.x) / ray.Direction.x;
-        tDeltaX = 1.0 / -ray.Direction.x;
-    }
+    float tDeltaX = (ray.Direction.x != 0) ? 1.0 / ray.Direction.x * stepX : MAX_VAL;
+    float tDeltaY = (ray.Direction.y != 0) ? 1.0 / ray.Direction.y * stepY : MAX_VAL;
+    float tDeltaZ = (ray.Direction.z != 0) ? 1.0 / ray.Direction.z * stepZ : MAX_VAL;
     
-    if (ray.Direction.y > 0)
-    {
-        stepY = 1;
-        tMaxY = (currentvoxel.y + ray.Origin.y) / ray.Direction.y;
-        tDeltaY = 1.0 / ray.Direction.y;
-    }
-    else
-    {
-        stepY = -1;
-        tMaxY = ((currentvoxel.y - 1) + ray.Origin.y) / ray.Direction.y;
-        tDeltaY = 1.0 / -ray.Direction.y;
-    }
     
-    if (ray.Direction.z > 0)
-    {
-        stepZ = 1;
-        tMaxZ = (currentvoxel.z + ray.Origin.z) / ray.Direction.z;
-        tDeltaZ = 1.0 / ray.Direction.z;
-    }
-    else
-    {
-        stepZ = -1;
-        tMaxZ = ((currentvoxel.z - 1) + ray.Origin.z) / ray.Direction.z;
-        tDeltaZ = 1.0 / -ray.Direction.z;
-    }
-            
-    for (int i = 0; i < 1000; i++)
+    for (int i = 0; i < 100; i++)
     {
         if (tMaxX < tMaxY)
         {
