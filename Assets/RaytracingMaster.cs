@@ -24,9 +24,9 @@ public class RaytracingMaster : MonoBehaviour
         Render(destination);
     }
 
-    private int offset(int x, int y, int z)
+    private int Offset(int x, int y, int z)
     {
-        return x + 32 * (y + 32 * z);
+        return x + 256 * (y + 256 * z);
     }
 
     private void Awake()
@@ -37,17 +37,7 @@ public class RaytracingMaster : MonoBehaviour
 
         element = new Vector4[1];
 
-        for(int x = 0; x < 32; x++)
-        {
-            for (int z = 0; z < 32; z++)
-            {
-                blockarr[offset(x, 1, z)] = 2;
-            }
-        }
-
-        blockarr[offset(5, 4, 5)] = 2;
-        blockarr[offset(5, 3, 5)] = 2;
-        blockarr[offset(5, 2, 5)] = 2;
+        blockarr[Offset(0, 0, 0)] = 1;
 
         Debug = new ComputeBuffer(1, 16, ComputeBufferType.Default);
         RayTracingShader.SetBuffer(0, "debug", Debug);
@@ -91,12 +81,19 @@ public class RaytracingMaster : MonoBehaviour
 
     private void OnDrawGizmos()
     {
-        //Gizmos.DrawCube(new Vector3(element[0].x - 0.5f, element[0].y - 0.5f, element[0].z - 0.5f), new Vector3(1.0f, 1.0f, 1.0f));
+        Gizmos.DrawCube(new Vector3(0.0f, 0.0f, 0.0f), new Vector3(0.1f, 0.1f, 0.1f));
+        Gizmos.DrawCube(new Vector3(1.0f, 0.0f, 0.0f), new Vector3(0.1f, 0.1f, 0.1f));
+        Gizmos.DrawCube(new Vector3(1.0f, 1.0f, 1.0f), new Vector3(0.1f, 0.1f, 0.1f));
+        Gizmos.DrawCube(new Vector3(1.0f, 1.0f, 0.0f), new Vector3(0.1f, 0.1f, 0.1f));
+        Gizmos.DrawCube(new Vector3(0.0f, 1.0f, 1.0f), new Vector3(0.1f, 0.1f, 0.1f));
+        Gizmos.DrawCube(new Vector3(0.0f, 0.0f, 1.0f), new Vector3(0.1f, 0.1f, 0.1f));
+        Gizmos.DrawCube(new Vector3(1.0f, 0.0f, 1.0f), new Vector3(0.1f, 0.1f, 0.1f));
+        Gizmos.DrawCube(new Vector3(0.0f, 1.0f, 0.0f), new Vector3(0.1f, 0.1f, 0.1f));
 
-        for(int x = 0; x < 6; x++)
+        /*for(int x = 0; x < 6; x++)
         {
-            Gizmos.DrawWireCube(new Vector3(x - 0.5f, -0.5f, -0.5f), new Vector3(1.0f, 1.0f, 1.0f));
-        }
+            Gizmos.DrawWireCube(new Vector3(x, 0, 0), new Vector3(1.0f, 1.0f, 1.0f));
+        }*/
     }
 
     private void OnGUI()
