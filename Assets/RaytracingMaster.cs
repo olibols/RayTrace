@@ -1,13 +1,17 @@
 using System.Collections;
 using System.Collections.Generic;
+using System;
+using System.IO;
+using System.Linq;
 using UnityEngine;
+using VoxReader;
 
 public class RaytracingMaster : MonoBehaviour
 {
     public ComputeShader RayTracingShader;
     public Texture SkyboxTexture;
 
-    public Texture CrosshairTexture;
+    public WorldController World;
 
     public Light DirectionalLight;
 
@@ -15,6 +19,7 @@ public class RaytracingMaster : MonoBehaviour
     private Camera m_Camera;
 
     private ComputeBuffer BlocksBuffer;
+    private ComputeBuffer PaletteBuffer;
 
     private ComputeBuffer Debug;
     private Vector4[] element;
@@ -26,23 +31,34 @@ public class RaytracingMaster : MonoBehaviour
 
     private int Offset(int x, int y, int z)
     {
-        return x + 256 * (y + 256 * z);
+        return x + 32 * (y + 32 * z);
     }
 
-    private void Awake()
+    private void Start()
     {
         m_Camera = GetComponent<Camera>();
-
-        int[] blockarr = new int[256 * 256 * 256];
-
         element = new Vector4[1];
 
-        blockarr[Offset(0, 0, 0)] = 1;
+        // Read data from magicavox files
+        var data = File.ReadAllBytes("Assets/Models/blue flower.vox");
+        var chunks = Reader.GetChunks(data);
+        var paletteChunk = chunks.FirstOrDefault(c => c.Id == nameof(ChunkType.RGBA)) as PaletteChunk;
+        Vector3Int[] PaletteArray = new Vector3Int[256];
+        for (int i = 0; i < paletteChunk.Colors.Length; i++)
+        {
+            var col = paletteChunk.Colors[i];
+            PaletteArray[i] = new Vector3Int(col.R, col.G, col.B);
+        }
 
         Debug = new ComputeBuffer(1, 16, ComputeBufferType.Default);
         RayTracingShader.SetBuffer(0, "debug", Debug);
         Graphics.SetRandomWriteTarget(0, Debug, false);
 
+        PaletteBuffer = new ComputeBuffer(PaletteArray.Length, sizeof(int) * 3, ComputeBufferType.Structured);
+        PaletteBuffer.SetData(PaletteArray);
+        RayTracingShader.SetBuffer(0, "PaletteBuffer", PaletteBuffer);
+
+        int[] blockarr = World.GetChunk(0, 0, 0).GetVoxels();
         BlocksBuffer = new ComputeBuffer(blockarr.Length, sizeof(int), ComputeBufferType.Structured);
         BlocksBuffer.SetData(blockarr);
         RayTracingShader.SetBuffer(0, "Blocks", BlocksBuffer);
@@ -81,19 +97,10 @@ public class RaytracingMaster : MonoBehaviour
 
     private void OnDrawGizmos()
     {
-        Gizmos.DrawCube(new Vector3(0.0f, 0.0f, 0.0f), new Vector3(0.1f, 0.1f, 0.1f));
-        Gizmos.DrawCube(new Vector3(1.0f, 0.0f, 0.0f), new Vector3(0.1f, 0.1f, 0.1f));
-        Gizmos.DrawCube(new Vector3(1.0f, 1.0f, 1.0f), new Vector3(0.1f, 0.1f, 0.1f));
-        Gizmos.DrawCube(new Vector3(1.0f, 1.0f, 0.0f), new Vector3(0.1f, 0.1f, 0.1f));
-        Gizmos.DrawCube(new Vector3(0.0f, 1.0f, 1.0f), new Vector3(0.1f, 0.1f, 0.1f));
-        Gizmos.DrawCube(new Vector3(0.0f, 0.0f, 1.0f), new Vector3(0.1f, 0.1f, 0.1f));
-        Gizmos.DrawCube(new Vector3(1.0f, 0.0f, 1.0f), new Vector3(0.1f, 0.1f, 0.1f));
-        Gizmos.DrawCube(new Vector3(0.0f, 1.0f, 0.0f), new Vector3(0.1f, 0.1f, 0.1f));
-
-        /*for(int x = 0; x < 6; x++)
+        for(int x = 0; x < 6; x++)
         {
-            Gizmos.DrawWireCube(new Vector3(x, 0, 0), new Vector3(1.0f, 1.0f, 1.0f));
-        }*/
+            Gizmos.DrawWireCube(new Vector3(x + 0.5f, 0.5f, 0.5f), new Vector3(1.0f, 1.0f, 1.0f));
+        }
     }
 
     private void OnGUI()

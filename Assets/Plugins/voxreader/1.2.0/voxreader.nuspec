@@ -1,0 +1,19 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2011/08/nuspec.xsd">
+  <metadata>
+    <id>VoxReader</id>
+    <version>1.2.0</version>
+    <title>VoxReader</title>
+    <authors>Sandro Figo</authors>
+    <owners>Sandro Figo</owners>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <license type="file">LICENSE.md</license>
+    <licenseUrl>https://aka.ms/deprecateLicenseUrl</licenseUrl>
+    <projectUrl>https://github.com/sandrofigo/VoxReader</projectUrl>
+    <iconUrl>https://github.com/sandrofigo/VoxReader/blob/master/images/icon.png?raw=true</iconUrl>
+    <description>Provides classes to read .vox files created with MagicaVoxel</description>
+    <copyright>Copyright 2019</copyright>
+    <tags>vox voxel parse file MagicaVoxel</tags>
+    <dependencies />
+  </metadata>
+</package>

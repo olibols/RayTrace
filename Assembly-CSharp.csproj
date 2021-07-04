@@ -60,7 +60,11 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Assets\RaytracingMaster.cs" />
+    <Compile Include="Assets\WorldController.cs" />
+    <Compile Include="Assets\ModelController.cs" />
+    <Compile Include="Assets\Chunk.cs" />
     <Compile Include="Assets\CameraController.cs" />
+    <Compile Include="Assets\ChunkUtils.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Assets\Fantasy Skybox FREE\Readme.txt" />
@@ -297,6 +301,9 @@
     </Reference>
     <Reference Include="UnityEditor.UnityConnectModule">
       <HintPath>C:\Program Files\Unity\Hub\Editor\2021.1.11f1\Editor\Data\Managed\UnityEngine\UnityEditor.UnityConnectModule.dll</HintPath>
+    </Reference>
+    <Reference Include="VoxReader">
+      <HintPath>Assets\Plugins\voxreader\1.2.0\lib\net461\VoxReader.dll</HintPath>
     </Reference>
     <Reference Include="Newtonsoft.Json">
       <HintPath>Library\PackageCache\com.unity.nuget.newtonsoft-json@2.0.0\Runtime\Newtonsoft.Json.dll</HintPath>

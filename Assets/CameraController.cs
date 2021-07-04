@@ -14,9 +14,9 @@ public class CameraController : MonoBehaviour
     space : Moves camera on X and Z axis only.  So camera doesn't gain any height*/
 
 
-    float mainSpeed = 10.0f; //regular speed
+    public float mainSpeed = 10.0f; //regular speed
     float shiftAdd = 250.0f; //multiplied by how long shift is held.  Basically running
-    float maxShift = 50.0f; //Maximum speed when holdin gshift
+    public float maxShift = 50.0f; //Maximum speed when holdin gshift
     float camSens = 0.25f; //How sensitive it with mouse
     private Vector3 lastMouse = new Vector3(255, 255, 255); //kind of in the middle of the screen, rather than at the top (play)
     private float totalRun = 1.0f;
@@ -31,7 +31,6 @@ public class CameraController : MonoBehaviour
         //Mouse  camera angle done.  
 
         //Keyboard commands
-        float f = 0.0f;
         Vector3 p = GetBaseInput();
         if (p.sqrMagnitude > 0)
         { // only move while a direction key is pressed
@@ -51,17 +50,7 @@ public class CameraController : MonoBehaviour
 
             p = p * Time.deltaTime;
             Vector3 newPosition = transform.position;
-            /*if (Input.GetKey(KeyCode.Space))
-            { //If player wants to move on X and Z axis only
-                transform.Translate(p);
-                newPosition.x = transform.position.x;
-                newPosition.z = transform.position.z;
-                transform.position = newPosition;
-            }
-            else
-            {*/
-                transform.Translate(p);
-            //}
+            transform.Translate(p);
         }
     }
 

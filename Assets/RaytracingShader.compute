@@ -1,8 +1,5 @@
- // Each #kernel tells which function to compile; you can have many kernels
 #pragma kernel CSMain
 
-// Create a RenderTexture with enableRandomWrite flag and set it
-// with cs.SetTexture
 RWTexture2D<float4> Result;
 float4x4 CameraToWorld;
 float4x4 CameraInverse;
@@ -12,12 +9,14 @@ Texture2D<float4> SkyboxTexture;
 SamplerState sampler_SkyboxTexture;
 
 StructuredBuffer<int> Blocks;
+StructuredBuffer<int3> PaletteBuffer;
 
 RWStructuredBuffer<float4> debug;
 
 static const float PI = 3.14159265f;
-static const int CHUNK_SIZE = 256;
+static const int CHUNK_SIZE = 32;
 static const float MAX_VAL = 99999999999.0f;
+static const uint MAX_STEPS = 400;
 
 bool test = false;
 
@@ -67,6 +66,14 @@ Ray CreateRay(float3 Origin, float3 Direction)
     return ray;
 };
 
+float nrand(float3 uv)
+{
+    float val = frac(sin(dot(uv.xyz, float3(12.9898, 78.233, 16.9898))) * 43758.5453 );
+    val /= 10;
+    val += 0.9;
+    return val;
+}
+
 //Create the normalized ray in a direction for a given pixel
 Ray CreateCameraRay(float2 pixel)
 {
@@ -78,11 +85,28 @@ Ray CreateCameraRay(float2 pixel)
     return CreateRay(origin, direction);
 }
 
-float GetBlock(int x, int y, int z)
+float3 IntToRGB(int color)
+{
+    float3 col = PaletteBuffer[color] / 255.0f;
+    return col.rgb;
+}
+
+int GetVoxel(int x, int y, int z)
 {
     if (x < 0 || x > CHUNK_SIZE || y < 0 || y > CHUNK_SIZE || z < 0 || z > CHUNK_SIZE)
-        return 0;
+        return 257;
+    
     return Blocks[x + CHUNK_SIZE * (y + CHUNK_SIZE * z)];
+}
+
+int GetColorIndex(int voxel)
+{
+    return voxel & 0xFF;
+}
+
+int GetDistanceStep(int voxel)
+{
+    return (voxel >> 8) & 0xFF;
 }
 
 float DistanceToBox(float3 raypos, int3 pos)
@@ -105,57 +129,30 @@ float SDFIntersect(Ray ray, int3 pos)
 VoxelHit VoxelIntersect(Ray ray)
 {
     int3 currentvoxel = int3(floor(ray.Origin.x), floor(ray.Origin.y), floor(ray.Origin.z));
-                
-    int stepX = (ray.Direction.x >= 0) ? 1 : -1;
-    int stepY = (ray.Direction.y >= 0) ? 1 : -1;
-    int stepZ = (ray.Direction.z >= 0) ? 1 : -1;
     
-    float tMaxX = (ray.Direction.x > 0) ? ((currentvoxel.x + 1) - ray.Origin.x) / ray.Direction.x : ((currentvoxel.x) - ray.Origin.x) / ray.Direction.x;
-    float tMaxY = (ray.Direction.y > 0) ? ((currentvoxel.y + 1) - ray.Origin.y) / ray.Direction.y : ((currentvoxel.y) - ray.Origin.y) / ray.Direction.y;
-    float tMaxZ = (ray.Direction.z > 0) ? ((currentvoxel.z + 1) - ray.Origin.z) / ray.Direction.z : ((currentvoxel.z) - ray.Origin.z) / ray.Direction.z;
+    float3 deltaDist = abs(length(ray.Direction).xxx / ray.Direction);
+    float3 sideDist = (sign(ray.Direction) * (float3(currentvoxel) - ray.Origin) + (sign(ray.Direction) * 0.5) + 0.5) * deltaDist;
+    float3 mask;
+    int3 rayStep = int3(sign(ray.Direction));
+    float totaldist = 0.0;
     
-    float tDeltaX = (ray.Direction.x != 0) ? 1.0 / ray.Direction.x * stepX : MAX_VAL;
-    float tDeltaY = (ray.Direction.y != 0) ? 1.0 / ray.Direction.y * stepY : MAX_VAL;
-    float tDeltaZ = (ray.Direction.z != 0) ? 1.0 / ray.Direction.z * stepZ : MAX_VAL;
-    
-    
-    for (int i = 0; i < 100; i++)
+    for (uint i = 0; i < MAX_STEPS; i++)
     {
-        if (tMaxX < tMaxY)
-        {
-            if (tMaxX < tMaxZ)
-            {
-                currentvoxel.x += stepX;
-                tMaxX += tDeltaX;
-            }
-            else
-            {
-                currentvoxel.z += stepZ;
-                tMaxZ += tDeltaZ;
-            }
-        }
-        else
-        {
-            if (tMaxY < tMaxZ)
-            {
-                currentvoxel.y += stepY;
-                tMaxY += tDeltaY;
-            }
-            else
-            {
-                currentvoxel.z += stepZ;
-                tMaxZ += tDeltaZ;
-            }
-        }
-        
-        float block = GetBlock(currentvoxel.x, currentvoxel.y, currentvoxel.z);
-        
-        if (block != 0.0)
+        uint block = GetVoxel(currentvoxel.x, currentvoxel.y, currentvoxel.z);
+        int dist = GetDistanceStep(block) - 1;
+        if (GetColorIndex(block) != 0 && block != 257)
         {
             VoxelHit hit = CreateVoxelHit(currentvoxel, block);
             return hit;
         }
+        
+        float3 mi = min(min(sideDist.x, sideDist.y), sideDist.z) - sideDist;
+        mask = ceil((max(dist - 1.0, 0.01) + mi) / deltaDist);
+        sideDist += mask * deltaDist;
+        currentvoxel += int3(mask) * rayStep;
+        totaldist += 1;
     }
+    
     VoxelHit hit = CreateVoxelHit(int3(0, 0, 0), 0);
     return hit;
 }
@@ -178,25 +175,27 @@ float3 Shade(inout Ray ray, VoxelHit hit)
     }
     else
     {
-        float3 SurfaceCol;
-        if(hit.VoxelType == 1)
-            SurfaceCol = float3(110.0f / 255.0f, 180.0f / 255.0f, 110.0f / 255.0f);
+        float3 SurfaceCol = IntToRGB(GetColorIndex(hit.VoxelType)) * nrand(hit.Position);
         
-        if (hit.VoxelType == 2)
-            SurfaceCol = float3(160.0f / 255.0f, 82.0f / 255.0f, 45.0f / 255.0f);
-        
-        /*float shadow = 0.0;
-        float3 ShadowRayOrigin = hit.Position;
+        float shadow = 0.0;
         float3 ShadowRayDirection = -LightDir.xyz;
-        Ray ray = CreateRay(ShadowRayOrigin, ShadowRayDirection);
+        float3 ShadowRayOrigin = hit.Position + 0.5f;
+        
+        float stepX = (ShadowRayDirection.x >= 0) ? 0.49 : -0.49;
+        float stepY = (ShadowRayDirection.y >= 0) ? 0.5 : -0.5;
+        float stepZ = (ShadowRayDirection.z >= 0) ? 0.49 : -0.49;
+            
+        float tDeltaX = (ray.Direction.x != 0) ? 1.0 / ray.Direction.x * stepX : MAX_VAL;
+        float tDeltaY = (ray.Direction.y != 0) ? 1.0 / ray.Direction.y * stepY : MAX_VAL;
+        float tDeltaZ = (ray.Direction.z != 0) ? 1.0 / ray.Direction.z * stepZ : MAX_VAL;
+                
+        Ray ray = CreateRay(ShadowRayOrigin + float3(stepX, stepY, stepZ), ShadowRayDirection);
         if (VoxelIntersect(ray).VoxelType != 0)
         {
             shadow = 1.0;
-        }*/
-               
-        //return lerp(SurfaceCol, SurfaceCol * 0.2, shadow);
-        return SurfaceCol;
-
+        }
+              
+        return lerp(SurfaceCol, SurfaceCol * 0.7, shadow);
     }
 }
 
